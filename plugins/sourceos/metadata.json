@@ -1,0 +1,13 @@
+{
+  "name": "SourceOS",
+  "description": "SourceOS workstation actions (doctor, profiles, tools)",
+  "license": "MIT",
+  "url": "https://github.com/SociOS-Linux/albert",
+  "readme_url": "https://github.com/SociOS-Linux/albert/tree/dev/plugins/sourceos",
+  "authors": ["SociOS-Linux"],
+  "maintainers": ["@mdheller"],
+  "binary_dependencies": ["sourceos"],
+  "runtime_dependencies": [],
+  "plugin_dependencies": [],
+  "loadtype": "user"
+}
