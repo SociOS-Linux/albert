@@ -10,24 +10,26 @@
 
 #include <QString>
 #include <QStringList>
+
+#include <algorithm>
 #include <vector>
 
 namespace {
 
-static inline double scoreMatch(const albert::Match &m)
+static inline double clamp01(double s)
 {
-    if (!m)
-        return 0.0;
-    // m.score() is [0,1] for matches; clamp defensively.
-    const double s = m.score();
-    return s < 0.0 ? 0.0 : (s > 1.0 ? 1.0 : s);
+    if (s < 0.0) return 0.0;
+    if (s > 1.0) return 1.0;
+    return s;
 }
 
-static inline std::vector<QString> keywords(const QString &s)
+static inline double matchScore(const QString &query, const QString &candidate)
 {
-    // Keep it simple: keyword list used by matcher scoring.
-    // (We can evolve to richer tokenization later.)
-    return {s};
+    albert::Matcher m(candidate);
+    const albert::Match mm = m.match(query);
+    if (!mm)
+        return 0.0;
+    return clamp01(mm.score());
 }
 
 }  // namespace
@@ -46,7 +48,7 @@ public:
 
     QString synopsis(const QString &query) const override
     {
-        Q_UNUSED(query);
+        (void)query;
         return "doctor | profile apply | k9s | lazygit";
     }
 
@@ -62,40 +64,66 @@ public:
 
     std::vector<albert::RankItem> rankItems(albert::QueryContext &context) override
     {
-        // This runs in a worker thread (RankedQueryHandler contract).
         const QString q = context.query().trimmed();
+        const bool empty = q.isEmpty();
 
         struct ActionDef {
-            QString key;        // query keyword
-            QString title;      // item label
-            QString subtitle;   // item subtext
-            QString grapheme;   // icon
-            QStringList cmd;    // commandline
+            QString key;
+            QString title;
+            QString subtitle;
+            QString grapheme;
+            QStringList cmd;
+            std::vector<QString> terms;
         };
 
         const std::vector<ActionDef> actions = {
-            {"doctor", "SourceOS: doctor", "Run workstation checks (workstation-v0)", "🩺", {"sourceos", "doctor", "workstation-v0"}},
-            {"apply",  "SourceOS: profile apply", "Apply workstation profile (workstation-v0)", "🧰", {"sourceos", "profile", "apply", "workstation-v0"}},
-            {"k9s",    "Open k9s", "Kubernetes TUI", "⎈", {"k9s"}},
-            {"lazygit", "Open lazygit", "Git TUI", "🌿", {"lazygit"}},
-        };
+            {"doctor",
+             "SourceOS: doctor",
+             "Run workstation checks (workstation-v0)",
+             "🩺",
+             {"sourceos", "doctor", "workstation-v0"},
+             {"doctor", "check", "diagnose", "health"}},
 
-        // Empty query: show all actions with score 0.
-        const bool empty = q.isEmpty();
+            {"apply",
+             "SourceOS: profile apply",
+             "Apply workstation profile (workstation-v0)",
+             "🧰",
+             {"sourceos", "profile", "apply", "workstation-v0"},
+             {"apply", "profile", "install", "bootstrap"}},
+
+            {"k9s",
+             "Open k9s",
+             "Kubernetes TUI",
+             "⎈",
+             {"k9s"},
+             {"k9s", "kube", "kubernetes"}},
+
+            {"lazygit",
+             "Open lazygit",
+             "Git TUI",
+             "🌿",
+             {"lazygit"},
+             {"lazygit", "git"}},
+        };
 
         std::vector<albert::RankItem> out;
         out.reserve(actions.size());
 
         for (const auto &a : actions) {
             double score = 0.0;
-            if (!empty) {
-                albert::Matcher m(a.key);
-                score = scoreMatch(m.match(q));
+
+            if (empty) {
+                // Be conservative: RankItem doc says (0,1] even though empty queries are a special case.
+                score = 0.01;
+            } else {
+                for (const auto &term : a.terms)
+                    score = std::max(score, matchScore(q, term));
+
                 if (score <= 0.0)
                     continue;
             }
 
-            auto icon = [g=a.grapheme]() {
+            auto icon_factory = [g=a.grapheme]() {
                 return albert::Icon::grapheme(g, 1.0);
             };
 
@@ -103,9 +131,7 @@ public:
             acts.push_back(albert::Action{
                 "run",
                 "Run",
-                [cmd=a.cmd]() {
-                    albert::runDetachedProcess(cmd);
-                },
+                [cmd=a.cmd]() { albert::runDetachedProcess(cmd); },
                 true
             });
 
@@ -113,21 +139,14 @@ public:
                 QString("sourceos.%1").arg(a.key),
                 a.title,
                 a.subtitle,
-                icon,
+                icon_factory,
                 std::move(acts),
                 a.key
             );
 
-            // RankedQueryHandler expects score in (0,1]. For empty query we use 0, but the
-            // docs say empty string yields score 0; core handles this.
-            out.emplace_back(item, empty ? 0.0 : score);
+            out.emplace_back(item, score);
         }
 
         return out;
     }
 };
-
-ALBERT_PLUGIN
-
-// Qt plugin entry point
-#include "sourceos.moc"
