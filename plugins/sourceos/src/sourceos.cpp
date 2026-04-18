@@ -32,9 +32,9 @@ static inline double matchScore(const QString &query, const QString &candidate)
     return clamp01(mm.score());
 }
 
-static inline long long run(const QStringList &cmd)
+static inline void run(const QStringList &cmd)
 {
-    return albert::runDetachedProcess(cmd);
+    (void)albert::runDetachedProcess(cmd);
 }
 
 }  // namespace
@@ -50,7 +50,7 @@ public:
     QString synopsis(const QString &query) const override
     {
         (void)query;
-        return "doctor | profile apply | status | sesh | tmux | k9s | lazygit | lazydocker | yazi";
+        return "status | doctor | profile apply | sesh | tmux | k9s | lazygit | lazydocker | yazi";
     }
 
     QString defaultTrigger() const override
@@ -77,26 +77,25 @@ public:
             std::vector<QString> terms;
         };
 
-        // NOTE: We intentionally call the installed `sourceos` helper CLI.
-        // The workstation profile installs it into ~/.local/bin.
+        // Launcher-friendly commands: use --open variants to open reports.
         const std::vector<ActionDef> actions = {
             {"status",
              "SourceOS: status",
-             "Run workstation doctor (fast health check)",
+             "Open JSON workstation health report",
              "✅",
-             {"sourceos", "doctor"},
-             {"status", "doctor", "check", "health"}},
+             {"sourceos", "status", "--open"},
+             {"status", "health", "json"}},
 
             {"doctor",
              "SourceOS: doctor",
-             "Run workstation checks",
+             "Open full doctor output",
              "🩺",
-             {"sourceos", "doctor"},
-             {"doctor", "check", "diagnose", "health"}},
+             {"sourceos", "doctor", "--open"},
+             {"doctor", "check", "diagnose"}},
 
             {"apply",
              "SourceOS: profile apply",
-             "Apply workstation profile",
+             "Apply workstation profile (may prompt for sudo)",
              "🧰",
              {"sourceos", "profile", "apply"},
              {"apply", "profile", "install", "bootstrap"}},
