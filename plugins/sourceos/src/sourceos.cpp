@@ -32,6 +32,11 @@ static inline double matchScore(const QString &query, const QString &candidate)
     return clamp01(mm.score());
 }
 
+static inline void run(const QStringList &cmd)
+{
+    (void)albert::runDetachedProcess(cmd);
+}
+
 }  // namespace
 
 class SourceOSPlugin final : public albert::ExtensionPlugin,
@@ -42,14 +47,10 @@ class SourceOSPlugin final : public albert::ExtensionPlugin,
 public:
     SourceOSPlugin() = default;
 
-    QString id() const override { return "sourceos"; }
-    QString name() const override { return "SourceOS"; }
-    QString description() const override { return "SourceOS workstation actions (doctor, profiles, tools)"; }
-
     QString synopsis(const QString &query) const override
     {
         (void)query;
-        return "doctor | profile apply | k9s | lazygit";
+        return "status | doctor | profile apply | sesh | tmux | k9s | lazygit | lazydocker | yazi";
     }
 
     QString defaultTrigger() const override
@@ -76,20 +77,42 @@ public:
             std::vector<QString> terms;
         };
 
+        // Launcher-friendly commands: use --open variants to open reports.
         const std::vector<ActionDef> actions = {
+            {"status",
+             "SourceOS: status",
+             "Open JSON workstation health report",
+             "✅",
+             {"sourceos", "status", "--open"},
+             {"status", "health", "json"}},
+
             {"doctor",
              "SourceOS: doctor",
-             "Run workstation checks (workstation-v0)",
+             "Open full doctor output",
              "🩺",
-             {"sourceos", "doctor", "workstation-v0"},
-             {"doctor", "check", "diagnose", "health"}},
+             {"sourceos", "doctor", "--open"},
+             {"doctor", "check", "diagnose"}},
 
             {"apply",
              "SourceOS: profile apply",
-             "Apply workstation profile (workstation-v0)",
+             "Apply workstation profile (may prompt for sudo)",
              "🧰",
-             {"sourceos", "profile", "apply", "workstation-v0"},
+             {"sourceos", "profile", "apply"},
              {"apply", "profile", "install", "bootstrap"}},
+
+            {"sesh",
+             "Open sesh",
+             "tmux session manager",
+             "🧵",
+             {"sesh"},
+             {"sesh", "session", "tmux"}},
+
+            {"tmux",
+             "Open tmux",
+             "terminal multiplexer",
+             "🧩",
+             {"tmux"},
+             {"tmux", "mux"}},
 
             {"k9s",
              "Open k9s",
@@ -104,6 +127,20 @@ public:
              "🌿",
              {"lazygit"},
              {"lazygit", "git"}},
+
+            {"lazydocker",
+             "Open lazydocker",
+             "Docker/Podman TUI",
+             "🐳",
+             {"lazydocker"},
+             {"lazydocker", "docker", "podman"}},
+
+            {"yazi",
+             "Open yazi",
+             "Terminal file manager",
+             "📁",
+             {"yazi"},
+             {"yazi", "files", "file"}},
         };
 
         std::vector<albert::RankItem> out;
@@ -113,7 +150,6 @@ public:
             double score = 0.0;
 
             if (empty) {
-                // Be conservative: RankItem doc says (0,1] even though empty queries are a special case.
                 score = 0.01;
             } else {
                 for (const auto &term : a.terms)
@@ -131,7 +167,7 @@ public:
             acts.push_back(albert::Action{
                 "run",
                 "Run",
-                [cmd=a.cmd]() { albert::runDetachedProcess(cmd); },
+                [cmd=a.cmd]() { run(cmd); },
                 true
             });
 
